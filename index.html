@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lesson Plan Builder</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Source Sans 3',system-ui,sans-serif;background:#F0EBE3;-webkit-font-smoothing:antialiased}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:#ccc;border-radius:4px}
+textarea,input,select,button{font-family:inherit}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback} = React;
+
+const ALL_STRATEGIES=[
+  {id:1,name:"Adjust reading pace"},{id:2,name:"Re-read for clarity"},
+  {id:3,name:"Use background knowledge"},{id:4,name:"Identify sequence"},{id:5,name:"Comparison & contrast"},
+  {id:6,name:"Cause-effect"},{id:7,name:"Main idea"},{id:8,name:"Ask questions"},{id:9,name:"Make predictions"},
+  {id:10,name:"Explore events & details"},{id:11,name:"Summarize"},{id:12,name:"Infer"},
+  {id:13,name:"Author's message"},{id:14,name:"Visualize"},
+  {id:15,name:"Make connections"},{id:16,name:"Facts vs. opinions"},
+];
+
+const STRAT_INFO={
+  12:{desc:"Reading between the lines — combining what the text says with what students already know.",grade:"Grade 3–5: Infer causes/effects, recognize attitudes and emotions, draw lessons."},
+  3:{desc:"Using what students already know to make sense of new information in the text.",grade:"Grade 1–5: Activate prior knowledge before and during reading."},
+  9:{desc:"Using clues from the text and illustrations to guess what might happen next.",grade:"Grade 1–3: Make simple predictions; Grade 4–5: Revise predictions with evidence."},
+  7:{desc:"Finding the most important idea the author wants readers to understand.",grade:"Grade 2–5: Identify main idea and supporting details."},
+};
+const defaultStratInfo={desc:"Focus on this strategy throughout your read-aloud lesson.",grade:"Adapt activities to your grade level."};
+
+const BOOKS={12:["The Ugly Duckling","Each Kindness","Those Shoes"],9:["The Ugly Duckling","Each Kindness","Those Shoes"]};
+const defaultBooks=["Ask your librarian for suggestions"];
+
+/* Knowledgebase — books the AI "knows" */
+const BOOK_KB={
+  "The Ugly Duckling":{
+    genre:"fiction",hasChar:"yes",hasIllus:"yes",
+    about:"A duckling is rejected by other animals for being different, but eventually discovers he is actually a beautiful swan.",
+    charName:"the duckling",
+    vocab:["ugly (not nice to look at)","duckling (a baby duck)","swan (a big, beautiful white bird)"],
+    connectSuggs:["Has anyone ever felt different from everyone else? What happened?","Have you ever been surprised by how something turned out?","Think of a time someone was unkind to you. How did it feel?"],
+    predictSuggs:["What do you think will happen to the duckling?","Do you think the other animals will change how they treat him?","How do you think the story will end?"],
+    pauseSugg:[
+      {where:"After the other animals reject the duckling",what:"Ask: How does he feel? What tells you that?"},
+      {where:"When the duckling sees the swans for the first time",what:"Point to illustration. Ask: Why do you think he is scared?"},
+    ],
+    coverQ:"What do you notice about the duckling on the cover? How do you think he feels?",
+    ttQs:[{type:"Recall",co:"#2563EB",q:"Why did the other animals treat the duckling that way?"},{type:"Connect",co:"#166534",q:"What did the duckling learn about himself at the end?"},{type:"Evaluate",co:"#E8913A",q:"How did the duckling change from the beginning to the end?"}],
+    ttExtras:[{type:"Recall",co:"#2563EB",q:"What happened to the duckling after he left home?"},{type:"Connect",co:"#166534",q:"Have you ever felt like you did not belong? What happened?"},{type:"Evaluate",co:"#E8913A",q:"Why do you think the author wrote this story? What message is he trying to share?"}],
+    actSugg:"Draw how the duckling felt at the beginning and at the end. What changed?",
+    actByType:{
+      "Children drew or wrote":["Draw the duckling at the beginning and at the end. What changed?","Draw the moment the duckling discovers he is a swan. How does he feel?","Write one sentence: What did the duckling learn about himself?"],
+      "Used visual aids":["Show the cover and the last page side by side. What changed?","Point to the illustration when the duckling sees the swans. What is he feeling?"],
+      "Children acted out the story":["Act out the moment the duckling discovers he is a swan","Freeze as the duckling when the other animals reject him. How does he feel?","Take turns being the duckling and the other animals"],
+      "Practiced comprehension strategy":["Inference Ladder: What the text says / What I know / What I infer about the duckling","Before and After chart: How did the duckling feel at the start vs. the end? Why?"],
+    },
+  },
+  "Each Kindness":{
+    genre:"fiction",hasChar:"yes",hasIllus:"yes",
+    about:"Chloe and her friends refuse to be kind to the new girl Maya. When Maya leaves, Chloe realizes she missed every chance to be kind.",
+    charName:"Chloe",
+    vocab:["kindness (being nice and helpful to others)","ripple (a small wave that spreads out)"],
+    connectSuggs:["Has there ever been a new kid in your class? How did you treat them?","Have you ever wished you could go back and do something differently?","Think of a time someone was kind to you. How did it feel?"],
+    predictSuggs:["What do you think will happen between the two girls?","Do you think Chloe will be kind to Maya?","How do you think Maya feels?"],
+    pauseSugg:[
+      {where:"When Chloe and her friends ignore Maya at lunch",what:"Ask: How do you think Maya feels? What clues tell you that?"},
+      {where:"When the teacher drops a stone in the water and the ripples spread",what:"Ask: What do you think the teacher is trying to show them?"},
+    ],
+    coverQ:"What do you notice about the two girls on the cover? What do you think is happening between them?",
+    ttQs:[{type:"Recall",co:"#2563EB",q:"Why do you think Chloe never chose to be kind to Maya?"},{type:"Connect",co:"#166534",q:"How does Chloe feel at the end? What clues tell you?"},{type:"Evaluate",co:"#E8913A",q:"What do you think the author wants us to understand about kindness?"}],
+    ttExtras:[{type:"Recall",co:"#2563EB",q:"What did the teacher do with the stone and the water?"},{type:"Connect",co:"#166534",q:"Have you ever missed a chance to be kind? What happened?"},{type:"Evaluate",co:"#E8913A",q:"Why does the book end the way it does? What is the author telling us?"}],
+    actSugg:"Draw Chloe at the beginning and at the end. How did her feelings change? Why?",
+    actByType:{
+      "Children drew or wrote":["Draw Chloe at the beginning and at the end. How did her feelings change?","Draw the ripple scene. What is the teacher trying to show?","Write one sentence: What would you say to Chloe?"],
+      "Used visual aids":["Show the illustration of Maya sitting alone. How does she feel? What clues tell you?","Compare the first page and the last page. What changed for Chloe?"],
+      "Children acted out the story":["Freeze as Chloe at the end of the story. How does she feel?","Act out a scene where Chloe chooses to be kind to Maya. What changes?"],
+      "Practiced comprehension strategy":["Inference Ladder: What the text says / What I know / What I infer about Chloe","Ripple map: One kind act in the middle. Draw what ripples out from it."],
+    },
+  },
+  "Those Shoes":{
+    genre:"fiction",hasChar:"yes",hasIllus:"yes",
+    about:"Jeremy wants the cool shoes all the other kids have, but his family cannot afford them. He finds a too-small pair at a thrift store, then gives them to a friend who needs them.",
+    charName:"Jeremy",
+    vocab:["thrift store (a shop that sells used things for less money)","afford (having enough money to buy something)"],
+    connectSuggs:["Have you ever really wanted something you could not have?","Have you ever given something away to help someone else?","Think of a time you had to choose between what you want and what is right."],
+    predictSuggs:["What do you think Jeremy will do about the shoes?","Do you think Jeremy will get what he wants?","What do you think will happen when Jeremy sees Antonio?"],
+    pauseSugg:[
+      {where:"When Jeremy squeezes his feet into the too-small shoes",what:"Ask: Why do you think Jeremy bought shoes that don't fit? What clues tell you?"},
+      {where:"When Jeremy sees Antonio's broken shoes in the snow",what:"Ask: What do you think Jeremy is thinking right now? How do you know?"},
+    ],
+    coverQ:"What do you notice about the shoes on the cover? What do you think this story might be about?",
+    ttQs:[{type:"Recall",co:"#2563EB",q:"Why did Jeremy give the shoes to Antonio?"},{type:"Connect",co:"#166534",q:"How do you think Jeremy felt after giving the shoes away? What makes you think that?"},{type:"Evaluate",co:"#E8913A",q:"What does the author want us to learn about what we want vs. what we need?"}],
+    ttExtras:[{type:"Recall",co:"#2563EB",q:"What did Jeremy find at the thrift store?"},{type:"Connect",co:"#166534",q:"Have you ever wanted something you could not have? What did you do?"},{type:"Evaluate",co:"#E8913A",q:"Was Jeremy right to give away the shoes? Why or why not?"}],
+    actSugg:"Draw the moment Jeremy makes his decision. What was he thinking? What clues tell you?",
+    actByType:{
+      "Children drew or wrote":["Draw the moment Jeremy makes his decision. What was he thinking?","Draw Jeremy before and after giving the shoes away. What changed?","Write one sentence: Why did Jeremy give the shoes to Antonio?"],
+      "Used visual aids":["Show the illustration of Antonio in the snow. What do you notice about his shoes?","Compare the thrift store shoes and Antonio's broken shoes. What is Jeremy thinking?"],
+      "Children acted out the story":["Act out the moment Jeremy decides to give the shoes away","Freeze as Jeremy when he sees Antonio's broken shoes. What is he thinking?"],
+      "Practiced comprehension strategy":["Inference Ladder: What the text says / What I know / What I infer about Jeremy","Want vs. Need chart: What did Jeremy want? What did Antonio need? What did Jeremy do?"],
+    },
+  },
+};
+
+const BEFORE_OPTS=[
+  {label:"Introduce the book (title, author, illustrator)",rec:true},
+  {label:"Connect the story to children's experiences"},
+  {label:"Encourage predictions"},
+  {label:"Explore the cover and endpapers"},
+  {label:"Explain new vocabulary"},
+];
+
+/* CHANGE 1: Strategy-linked suggestions for each Before Reading option */
+const CONNECT_SUGG={
+  12:["Has anyone ever felt different from everyone else?","Have you ever been surprised by how something turned out?","Think of a time someone was unkind to you — how did it feel?"],
+  9:["Have you ever guessed what would happen and been wrong?","Think of a time you had to wait to find out something exciting."],
+  7:["What's the most important thing you learned this week? How did you decide it was the most important?"],
+  default:["Has something like this ever happened to you?","Can you think of a time you felt the same way as [character name]?","What does this story remind you of?"],
+};
+const PREDICT_SUGG={
+  12:["What do you think [character name] is really feeling inside?","What do you think will happen that the author hasn't told us yet?","Why do you think the author chose this title?"],
+  9:["What do you think will happen next?","Will [character name] get what they want? Why or why not?","How do you think the story will end?"],
+  7:["What do you think the most important part of this story will be?","What lesson do you think the author wants us to learn?"],
+  default:["What do you think this story will be about?","What do you think will happen to [character name]?","How do you think the story will end?"],
+};
+const INTRO_SUGG={
+  default:["Show the cover, read the title and author's name aloud.","Ask: Has anyone read a book by this author before?","Point out the illustrator: This person drew all the pictures."],
+};
+
+const DURING_OPTS=["Explain important words or ideas","Ask children to think or respond","Show how pictures help tell the story"];
+
+const COVER_QS_GENERAL=["What do you notice?","What do you think this story might be about?"];
+const COVER_QS_STRAT={
+  12:["How do you think [character name] is feeling? What makes you think that?","What has the author not told us yet?"],
+  9:["What do you think will happen? Why?","Does the cover give you any clues about the story?"],
+};
+const defaultCoverQs=["What do you think this story is about?","What are you curious about?"];
+
+const PAUSE_ACTIONS=["Ask a question","Explain a word or idea","Point to the illustration","Model thinking aloud"];
+const PAUSE_QS={12:["What do you think [character name] is feeling? What clues tell you that?","Why do you think that happened?"]};
+const defaultPauseQs=["What do you think about what just happened?","What might happen next?"];
+
+/* CHANGE 4: T&T — 1 pre-picked per R/C/E tied to strategy */
+const TT_PICKS={
+  12:{
+    recall:"What happened to [character name] that was unexpected?",
+    connect:"Why do you think [character name] felt that way? What clues helped you figure it out?",
+    evaluate:"What do you think the author wants us to learn about [theme, e.g. judging others]?",
+  },
+  9:{
+    recall:"What predictions did we make? Which ones came true?",
+    connect:"Why do you think [character name] made that choice? What would you have done?",
+    evaluate:"Was the ending what you expected? Why or why not?",
+  },
+  7:{
+    recall:"What was the most important thing that happened in this story?",
+    connect:"Why do you think the author included [key detail]? What does it help us understand?",
+    evaluate:"What is the big message or lesson of this story?",
+  },
+  default:{
+    recall:"What happened in the story?",
+    connect:"Why do you think [character name] did that? What clues helped you?",
+    evaluate:"What do you think the author wants us to understand?",
+  },
+};
+
+/* Extra matrix options for the dropdown */
+const TT_MATRIX_EXTRA={
+  12:{
+    recall:["Who are the main characters and what did they do?","What surprised you in the story?"],
+    connect:["Has something like this ever happened to you?","What would you have done differently than [character name]?"],
+    evaluate:["Do you agree with how [character name] acted? Why?","What would change if the story had a different ending?"],
+  },
+  default:{
+    recall:["What were the key events?","What happened at the beginning, middle, and end?"],
+    connect:["How is [character name] like someone you know?","What does this remind you of?"],
+    evaluate:["Was [character name]'s decision a good one? Why or why not?","What lesson can we take from this story?"],
+  },
+};
+
+const AFTER_ACTS=["Children drew or wrote","Used visual aids","Children acted out the story","Practiced comprehension strategy"];
+const ACT_PREFILLS={
+  "Children drew or wrote":["Draw [character name] from the story","Draw your favourite part","Write one sentence about what happened","Draw how [character name] felt — before and after"],
+  "Used visual aids":["Show two illustrations side by side — what changed?","Point to a picture and ask: what is happening here?","Use the cover to retell the story"],
+  "Children acted out the story":["Act out the most exciting moment","Take turns being [character name] and [other character]","Freeze! Show how [character name] was feeling"],
+  "Practiced comprehension strategy":["Use a graphic organiser to map the story","Sort events into beginning, middle, end","Fill in a [character name] feelings chart"],
+};
+const ACT_SUGG={12:[{name:"Inference Ladder",desc:'"Text says" / "I know" / "I infer"'},{name:"Before & After",desc:"Compare how a character felt at start vs. end — what changed?"}]};
+const defaultActSugg=[{name:"Story Map",desc:"Draw or fill in the key events."},{name:"Character Feelings",desc:"How did the character feel at beginning, middle, end?"}];
+
+const FAKE_DEFS={ugly:"not nice to look at",duckling:"a baby duck",swan:"a big, beautiful white bird",rejected:"when others don't want you around",afraid:"feeling scared",brave:"not giving up even when scared",kind:"being nice and helpful",lonely:"feeling sad because you're alone",reflection:"what you see when you look in the water",graceful:"moving in a smooth, beautiful way"};
+function genDefs(words){return words.map(w=>{const k=w.toLowerCase().trim();return{word:w.trim(),meaning:FAKE_DEFS[k]||"a word your students may not know"};})}
+
+const S={
+  frame:{maxWidth:420,margin:"20px auto",background:"#fff",borderRadius:28,boxShadow:"0 8px 40px rgba(0,0,0,.12)",overflow:"hidden",border:"1px solid #E5E0DA",display:"flex",flexDirection:"column",height:"92vh"},
+  header:{background:"#166534",color:"#fff",padding:"16px 20px",display:"flex",alignItems:"center",gap:12,flexShrink:0},
+  hIcon:{width:36,height:36,background:"rgba(255,255,255,.2)",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18},
+  body:{flex:1,overflowY:"auto",padding:"16px 14px 32px"},
+  divWrap:{display:"flex",alignItems:"center",gap:10,margin:"24px 0 14px"},
+  divLine:{flex:1,height:1,background:"#E5E0DA"},
+  divLabel:{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:1.2,color:"#166534",background:"#E8F3ED",padding:"4px 14px",borderRadius:100,whiteSpace:"nowrap"},
+  msgL:{display:"flex",justifyContent:"flex-start",marginBottom:10,animation:"fadeUp .35s ease"},
+  msgR:{display:"flex",justifyContent:"flex-end",marginBottom:10,animation:"fadeUp .35s ease"},
+  bL:{maxWidth:"92%",borderRadius:18,padding:"12px 16px",fontSize:14.5,lineHeight:1.55,background:"#fff",border:"1px solid #E5E0DA",borderBottomLeftRadius:6,color:"#2C2C2C"},
+  bR:{maxWidth:"92%",borderRadius:18,padding:"12px 16px",fontSize:14.5,lineHeight:1.55,background:"#DCF0E5",border:"1px solid #C2DFC9",borderBottomRightRadius:6,color:"#2C2C2C",fontWeight:500},
+  btn:{padding:"8px 18px",background:"#166534",color:"#fff",fontSize:13,borderRadius:12,fontWeight:600,border:"none",cursor:"pointer",marginTop:10},
+  fld:{width:"100%",padding:"8px 12px",borderRadius:12,border:"2px solid #E5E0DA",fontSize:13.5,background:"#FAFAF8",resize:"none",outline:"none"},
+  fldOk:{borderColor:"#166534",background:"#F4FAF6"},
+  chk:{display:"flex",alignItems:"flex-start",gap:8,padding:"7px 10px",borderRadius:10,fontSize:13.5,cursor:"pointer",border:"1px solid transparent",background:"#FAFAF8",marginBottom:4},
+  chkOn:{background:"#E8F3ED",borderColor:"#166534"},
+  chkOff:{opacity:.4,cursor:"not-allowed"},
+  box:{width:18,height:18,border:"2px solid #CCC",borderRadius:4,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1,fontSize:11},
+  boxOn:{background:"#166534",borderColor:"#166534",color:"#fff"},
+  qC:{padding:"8px 12px",borderRadius:10,fontSize:13,border:"1px solid #E5E0DA",background:"#FAFAF8",cursor:"pointer",marginBottom:5,transition:"all .15s"},
+  qCSel:{background:"#E8F3ED",borderColor:"#166534",boxShadow:"0 0 0 1px #166534"},
+  pCard:{border:"2px solid #E5E0DA",borderRadius:14,padding:"12px 14px",marginBottom:10,background:"#FAFAF8"},
+  pCardOk:{borderColor:"#166534",background:"#F4FAF6"},
+  chip:{display:"inline-block",fontSize:11,padding:"3px 8px",borderRadius:8,border:"1px solid #E5E0DA",background:"#fff",cursor:"pointer",marginRight:4,marginBottom:4},
+  chipOn:{background:"#166534",color:"#fff",borderColor:"#166534"},
+  sum:{background:"#FAFAF8",border:"1px solid #E5E0DA",borderRadius:16,padding:16,marginTop:8},
+  sumSec:{marginTop:10,paddingTop:8,borderTop:"1px solid #E5E0DA"},
+  sumLbl:{fontWeight:700,fontSize:11,textTransform:"uppercase",letterSpacing:.6,color:"#166534",marginBottom:2},
+  alert:{background:"#FFF9E6",border:"1px solid #EED97B",borderRadius:10,padding:"8px 12px",fontSize:12.5,color:"#7A6A1F",margin:"6px 0",lineHeight:1.4},
+  rec:{display:"inline-flex",alignItems:"center",gap:5,background:"#FFFBE6",border:"1px solid #F5D34E",borderRadius:8,padding:"5px 12px",fontSize:12.5,fontWeight:600,color:"#8B7A2B",margin:"6px 0"},
+  recSmall:{display:"inline-block",fontSize:9,fontWeight:700,background:"#E8F3ED",color:"#166534",padding:"2px 8px",borderRadius:6,marginLeft:8,textTransform:"uppercase",letterSpacing:.5},
+  detBtn:{fontWeight:600,fontSize:13,cursor:"pointer",color:"#166534",background:"none",border:"none",display:"flex",alignItems:"center",gap:6,padding:"4px 0"},
+  suggBubble:{display:"inline-block",fontSize:12,padding:"6px 12px",borderRadius:20,border:"1px solid #E5E0DA",background:"#FAFAF8",cursor:"pointer",marginRight:5,marginBottom:5,transition:"all .15s",lineHeight:1.3},
+  suggBubbleSel:{background:"#E8F3ED",borderColor:"#166534",fontWeight:600},
+};
+
+const Bub=({ch,u})=><div style={u?S.msgR:S.msgL}><div style={u?S.bR:S.bL}>{ch}</div></div>;
+const Div=({l})=><div style={S.divWrap}><div style={S.divLine}/><span style={S.divLabel}>{l}</span><div style={S.divLine}/></div>;
+const Chk=({l,on,off,fn,badge})=>(
+  <div onClick={off&&!on?undefined:fn} style={{...S.chk,...(on?S.chkOn:{}),...(off&&!on?S.chkOff:{})}}>
+    <div style={{...S.box,...(on?S.boxOn:{})}}>{on?"✓":""}</div>
+    <span>{l}{badge&&<span style={S.recSmall}>{badge}</span>}</span>
+  </div>
+);
+const QC=({ty,co,tx,fn,sel})=>(
+  <div onClick={fn} style={{...S.qC,...(sel?S.qCSel:{})}}>
+    <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:.8,color:co,marginBottom:2}}>{ty}</div>
+    <div>"{tx}"</div>
+  </div>
+);
+
+/* Suggestion bubble picker: tap to select, fills text field */
+function SuggPicker({suggestions,value,onChange,placeholder,label}){
+  return <div>
+    {label&&<div style={{fontSize:12,color:"#6B6B6B",marginBottom:6}}>{label}</div>}
+    <div style={{marginBottom:6}}>
+      {suggestions.map((s,i)=><span key={i} onClick={()=>onChange(s)}
+        style={{...S.suggBubble,...(value===s?S.suggBubbleSel:{})}}>{s}</span>)}
+    </div>
+    <div style={{fontSize:12,fontStyle:"italic",color:"#999",marginBottom:4}}>✍️ Tap one above or write your own — just make sure it fits your book and what your students know.</div>
+    <textarea value={value} onChange={e=>onChange(e.target.value)} rows={2} placeholder={placeholder}
+      style={{...S.fld,...(value?S.fldOk:{})}}/>
+  </div>;
+}
+
+function App(){
+  const[step,ss]=useState(0);
+  const[grade,sGrade]=useState("");const[stu,sStu]=useState("");
+  const[mode,sMode]=useState("");
+  const[strat,sStrat]=useState(null);
+  const[book,sBook]=useState("");const[bCust,sBCust]=useState(false);
+  const[genre,sGenre]=useState("");const[hasChar,sHasChar]=useState("");const[hasIllus,sHasIllus]=useState("");const[bookAbout,sBookAbout]=useState("");
+  const isKB = BOOK_KB[book] ? true : false;
+  const kb = BOOK_KB[book] || null;
+  const[bfC,sBfC]=useState([]);
+  // Before reading follow-up values
+  const[introText,sIntroText]=useState("");
+  const[connectText,sConnectText]=useState("");
+  const[predictText,sPredictText]=useState("");
+  const[vW,sVW]=useState("");const[vD,sVD]=useState([]);const[showD,sShowD]=useState(false);
+  const[cQ,sCQ]=useState("");
+  // During
+  const[drC,sDrC]=useState([]);const[drW,sDrW]=useState("");
+  const[p1w,sP1w]=useState("");const[p1a,sP1a]=useState("");const[p1d,sP1d]=useState("");
+  const[p2w,sP2w]=useState("");const[p2a,sP2a]=useState("");const[p2d,sP2d]=useState("");
+  // After
+  const[doTT,sTT]=useState(null);
+  const[ttQs,sTTQs]=useState([""]);
+  const[showMatrix,setShowMatrix]=useState(false);
+  const[afA,sAfA]=useState([]);
+  const[afNotes,sAfNotes]=useState({});
+  const[saved,sSaved]=useState(false);
+  const[shBA,sShBA]=useState(false);const[shAA,sShAA]=useState(false);
+  const er=useRef(null);
+
+  const go=useCallback(s=>{ss(s);setTimeout(()=>er.current?.scrollIntoView({behavior:"smooth"}),150)},[]);
+  useEffect(()=>{setTimeout(()=>er.current?.scrollIntoView({behavior:"smooth"}),120)},[step,showD,doTT]);
+
+  const sid=strat?.id;
+  const si=strat?(STRAT_INFO[sid]||defaultStratInfo):null;
+  const books=strat?(BOOKS[sid]||defaultBooks):defaultBooks;
+  const cQsS=strat?(COVER_QS_STRAT[sid]||defaultCoverQs):defaultCoverQs;
+  const pQs=strat?(PAUSE_QS[sid]||defaultPauseQs):defaultPauseQs;
+  const aS=strat?(ACT_SUGG[sid]||defaultActSugg):defaultActSugg;
+  const connectSuggs=strat?(CONNECT_SUGG[sid]||CONNECT_SUGG.default):CONNECT_SUGG.default;
+  const predictSuggs=strat?(PREDICT_SUGG[sid]||PREDICT_SUGG.default):PREDICT_SUGG.default;
+  const introSuggs=INTRO_SUGG.default;
+  const ttPicks=strat?(TT_PICKS[sid]||TT_PICKS.default):TT_PICKS.default;
+  const ttExtras=strat?(TT_MATRIX_EXTRA[sid]||TT_MATRIX_EXTRA.default):TT_MATRIX_EXTRA.default;
+
+  const togBf=o=>sBfC(p=>p.includes(o)?p.filter(x=>x!==o):p.length>=2?p:[...p,o]);
+  const togDr=o=>sDrC(p=>p.includes(o)?p.filter(x=>x!==o):p.length>=2?p:[...p,o]);
+  const togAf=o=>{
+    if(o==="none"){sAfA(["none"]);return;}
+    sAfA(p=>{
+      const clean=p.filter(x=>x!=="none");
+      if(clean.includes(o))return clean.filter(x=>x!==o);
+      if(clean.length>=2)return clean;
+      return[...clean,o];
+    });
+  };
+
+  const mkDefs=()=>{const w=vW.split(",").map(x=>x.trim()).filter(Boolean);if(w.length){sVD(genDefs(w));sShowD(true);}};
+  const updDef=(i,v)=>sVD(p=>p.map((d,j)=>j===i?{...d,meaning:v,edited:true}:d));
+  const setAfNote=(act,v)=>sAfNotes(p=>({...p,[act]:v}));
+
+  const hasVocabBefore=bfC.includes("Explain new vocabulary");
+  const hasWordsDuring=drC.includes("Explain important words or ideas");
+
+  // T&T question management — editable slots
+  const updateTTQ=(i,v)=>sTTQs(p=>p.map((q,j)=>j===i?v:q));
+  const addTTQ=()=>{if(ttQs.length<3)sTTQs(p=>[...p,""]);};
+  const removeTTQ=(i)=>sTTQs(p=>p.filter((_,j)=>j!==i));
+  const pickTTQ=(text)=>{
+    const emptyIdx=ttQs.findIndex(q=>!q.trim());
+    if(emptyIdx>=0){updateTTQ(emptyIdx,text);}
+    else if(ttQs.length<3){sTTQs(p=>[...p,text]);}
+  };
+
+  const getAllTTQs=()=>ttQs.filter(q=>q.trim()).map(q=>({q}));
+
+  const autoRCE=()=>{
+    const all=ttQs.join(" ").toLowerCase();const t=[];
+    if(all.includes("what happened")||all.includes("who")||all.includes("characters"))t.push("Recall");
+    if(all.includes("why")||all.includes("think")||all.includes("clue")||all.includes("feel")||all.includes("same or different"))t.push("Connect");
+    if(all.includes("author")||all.includes("learn")||all.includes("should")||all.includes("agree"))t.push("Evaluate");
+    if(!t.length)t.push("Connect");return t;
+  };
+
+  return(
+    <div style={{minHeight:"100vh",display:"flex",justifyContent:"center",padding:12,background:"#F0EBE3"}}>
+      <div style={S.frame}>
+        <div style={S.header}>
+          <div style={S.hIcon}>📖</div>
+          <div><div style={{fontWeight:700,fontSize:16,letterSpacing:-.3}}>Lesson Plan Builder</div><div style={{fontSize:12,opacity:.75}}>Interactive mockup</div></div>
+        </div>
+        <div style={S.body}>
+
+          {/* ===== STEP 1 ===== */}
+          <Div l="Step 1 · Basics"/>
+          <Bub ch={<div>
+            <b>{"Let\u2019s plan your read-aloud lesson!"}</b>
+
+            <div style={{fontSize:12.5,fontWeight:600,marginTop:10,marginBottom:5}}>How are you planning today?</div>
+            <div style={{display:"flex",gap:6,marginBottom:10}}>
+              <div onClick={()=>sMode("build")} style={{flex:1,padding:"8px 10px",borderRadius:10,border:"2px solid "+(mode==="build"?"#166534":"#E5E0DA"),background:mode==="build"?"#E8F3ED":"#fff",cursor:"pointer",textAlign:"center"}}>
+                <div style={{fontSize:12.5,fontWeight:600,color:mode==="build"?"#166534":"#2C2C2C"}}>{"\uD83D\uDCF1"} Build</div>
+                <div style={{fontSize:10,color:"#888",marginTop:2}}>Full plan, saved</div>
+              </div>
+              <div onClick={()=>sMode("guide")} style={{flex:1,padding:"8px 10px",borderRadius:10,border:"2px solid "+(mode==="guide"?"#166534":"#E5E0DA"),background:mode==="guide"?"#E8F3ED":"#fff",cursor:"pointer",textAlign:"center"}}>
+                <div style={{fontSize:12.5,fontWeight:600,color:mode==="guide"?"#166534":"#2C2C2C"}}>{"\uD83D\uDCBB"} Guide</div>
+                <div style={{fontSize:10,color:"#888",marginTop:2}}>Walkthrough, you plan on your own</div>
+              </div>
+            </div>
+
+            <div style={{display:"flex",gap:8}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,fontWeight:600,color:"#6B6B6B",marginBottom:2}}>Grade</div>
+                <select value={grade} onChange={e=>{sGrade(e.target.value);if(e.target.value&&stu&&mode)go(1)}} style={{...S.fld,padding:"8px 10px",...(grade?S.fldOk:{})}}>
+                  <option value="">Select</option>{[1,2,3,4,5].map(g=><option key={g} value={g}>Grade {g}</option>)}
+                </select>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:11,fontWeight:600,color:"#6B6B6B",marginBottom:2}}>Students</div>
+                <input type="number" value={stu} onChange={e=>{sStu(e.target.value);if(grade&&e.target.value&&mode)go(1)}} placeholder="e.g. 34" style={{...S.fld,...(stu?S.fldOk:{})}}/>
+              </div>
+            </div>
+            {mode&&grade&&stu&&<div style={{fontSize:10,color:"#999",fontStyle:"italic",marginTop:6}}>{mode==="guide"?"Inputs are optional in Guide mode. Use this as a reference while you plan elsewhere.":""}</div>}
+          </div>}/>
+
+          {/* ===== STEP 2 ===== */}
+          {step>=1&&<><Bub ch={<span>Grade {grade}, {stu} students</span>} u/>
+          <Div l="Step 2 · Objective"/>
+          <Bub ch={<div>
+            <b>What's the main objective?</b>
+            <div style={{maxHeight:240,overflowY:"auto",marginTop:6}}>
+              {ALL_STRATEGIES.map(s=><div key={s.id} onClick={()=>{sStrat(s);go(2)}} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:8,fontSize:13,cursor:"pointer",background:strat?.id===s.id?"#E8F3ED":"transparent",fontWeight:strat?.id===s.id?600:400,color:strat?.id===s.id?"#166534":"#2C2C2C"}}>
+                <div style={{width:16,height:16,borderRadius:"50%",border:"2px solid "+(strat?.id===s.id?"#166534":"#CCC"),background:strat?.id===s.id?"#166534":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  {strat?.id===s.id&&<div style={{width:6,height:6,background:"#fff",borderRadius:"50%"}}/>}
+                </div>{s.id}. {s.name}
+              </div>)}
+            </div>
+            {si&&<div style={{marginTop:10,background:"#E8F3ED",border:"1px solid #B8D9C5",borderRadius:12,padding:"10px 14px"}}>
+              <div style={{fontWeight:700,color:"#166534",fontSize:14}}>{strat.name}</div>
+              <div style={{fontSize:13,marginTop:4}}>{si.desc}</div>
+              <div style={{fontSize:12,color:"#6B6B6B",fontWeight:600,marginTop:6}}>{si.grade}</div>
+            </div>}
+          </div>}/></>}
+
+          {/* ===== STEP 3 ===== */}
+          {step>=2&&<><Bub ch={<span>{strat.id}. {strat.name}</span>} u/>
+          <Div l="Step 3 · Book"/>
+          <Bub ch={<div>
+            <b>These books work well for {strat.name}:</b>
+            <div style={{marginTop:8}}>
+              {books.map(b=><div key={b} onClick={()=>{sBook(b);sBCust(false);if(BOOK_KB[b]){sGenre(BOOK_KB[b].genre);sHasChar(BOOK_KB[b].hasChar);sHasIllus(BOOK_KB[b].hasIllus);sBookAbout(BOOK_KB[b].about);go(4)}else{go(3)}}} style={{padding:"8px 12px",borderRadius:10,fontSize:13,border:"1px solid "+(book===b&&!bCust?"#166534":"#E5E0DA"),background:book===b&&!bCust?"#E8F3ED":"#FAFAF8",cursor:"pointer",marginBottom:5}}>{b} {BOOK_KB[b]?<span style={{fontSize:9,fontWeight:700,color:"#22A652",background:"#D4F5DD",padding:"1px 6px",borderRadius:4,marginLeft:4}}>IN LIBRARY</span>:null}</div>)}
+              <div onClick={()=>{sBook("");sBCust(true)}} style={{padding:"8px 12px",borderRadius:10,fontSize:13,border:"1px dashed "+(bCust?"#166534":"#CCC"),color:bCust?"#166534":"#6B6B6B",cursor:"pointer",background:bCust?"#E8F3ED":"transparent"}}>I'll use a different book</div>
+            </div>
+            {bCust&&<div style={{marginTop:8}}>
+              <input type="text" value={book} onChange={e=>sBook(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&book.trim())go(3)}} placeholder="Type your book title..." style={{...S.fld,...(book?S.fldOk:{})}}/>
+              {book.trim()&&<button onClick={()=>go(3)} style={S.btn}>Continue →</button>}
+            </div>}
+          </div>}/></>}
+
+          {/* ===== STEP 3b: BOOK TYPE ===== */}
+          {step>=3&&<><Bub ch={<span>{book}</span>} u/>
+          <Div l="Step 3b · About Your Book"/>
+          <Bub ch={<div>
+            <div style={{fontSize:11.5,color:"#666",marginBottom:8}}>A few quick details help me tailor suggestions. All optional {"\u2014"} skip any you like.</div>
+
+            <div style={{fontSize:12.5,fontWeight:600,marginBottom:5}}>What kind of book?</div>
+            <div style={{display:"flex",gap:5,marginBottom:10}}>
+              <div onClick={()=>sGenre("fiction")} style={{flex:1,textAlign:"center",padding:"7px 6px",borderRadius:10,fontSize:11.5,fontWeight:600,border:"2px solid "+(genre==="fiction"?"#166534":"#E5E0DA"),background:genre==="fiction"?"#E8F3ED":"#fff",cursor:"pointer"}}>Fiction</div>
+              <div onClick={()=>sGenre("nonfiction")} style={{flex:1,textAlign:"center",padding:"7px 6px",borderRadius:10,fontSize:11.5,fontWeight:600,border:"2px solid "+(genre==="nonfiction"?"#166534":"#E5E0DA"),background:genre==="nonfiction"?"#E8F3ED":"#fff",cursor:"pointer"}}>Non-fiction</div>
+              <div onClick={()=>sGenre("poetry")} style={{flex:1,textAlign:"center",padding:"7px 6px",borderRadius:10,fontSize:11.5,fontWeight:600,border:"2px solid "+(genre==="poetry"?"#166534":"#E5E0DA"),background:genre==="poetry"?"#E8F3ED":"#fff",cursor:"pointer"}}>Poetry/Other</div>
+            </div>
+
+            <div style={{fontSize:12.5,fontWeight:600,marginBottom:5}}>Main character?</div>
+            <div style={{display:"flex",gap:5,marginBottom:10}}>
+              <div onClick={()=>sHasChar("yes")} style={{flex:1,textAlign:"center",padding:"7px 6px",borderRadius:10,fontSize:11.5,fontWeight:600,border:"2px solid "+(hasChar==="yes"?"#166534":"#E5E0DA"),background:hasChar==="yes"?"#E8F3ED":"#fff",cursor:"pointer"}}>Yes</div>
+              <div onClick={()=>sHasChar("no")} style={{flex:1,textAlign:"center",padding:"7px 6px",borderRadius:10,fontSize:11.5,fontWeight:600,border:"2px solid "+(hasChar==="no"?"#166534":"#E5E0DA"),background:hasChar==="no"?"#E8F3ED":"#fff",cursor:"pointer"}}>No</div>
+            </div>
+
+            <div style={{fontSize:12.5,fontWeight:600,marginBottom:5}}>Has illustrations?</div>
+            <div style={{display:"flex",gap:5,marginBottom:10}}>
+              <div onClick={()=>sHasIllus("yes")} style={{flex:1,textAlign:"center",padding:"7px 6px",borderRadius:10,fontSize:11.5,fontWeight:600,border:"2px solid "+(hasIllus==="yes"?"#166534":"#E5E0DA"),background:hasIllus==="yes"?"#E8F3ED":"#fff",cursor:"pointer"}}>Yes</div>
+              <div onClick={()=>sHasIllus("no")} style={{flex:1,textAlign:"center",padding:"7px 6px",borderRadius:10,fontSize:11.5,fontWeight:600,border:"2px solid "+(hasIllus==="no"?"#166534":"#E5E0DA"),background:hasIllus==="no"?"#E8F3ED":"#fff",cursor:"pointer"}}>No</div>
+            </div>
+
+            <div style={{fontSize:12.5,fontWeight:600,marginBottom:5}}>In a sentence, what{"\u2019"}s this book about?</div>
+            <textarea value={bookAbout} onChange={e=>sBookAbout(e.target.value)} rows={2} placeholder="e.g. A duckling gets rejected by other animals and discovers he's actually a swan" style={{width:"100%",padding:"8px 10px",borderRadius:10,border:"1.5px solid #E5E0DA",fontSize:12,lineHeight:1.4,background:"#FAFAF8",resize:"none",outline:"none"}}/>
+            <div style={{fontSize:10.5,color:"#999",fontStyle:"italic",marginTop:3}}>Optional {"\u2014"} helps me give more specific suggestions.</div>
+
+            <button onClick={()=>go(4)} style={{padding:"8px 18px",background:"#166534",color:"#fff",fontSize:12,borderRadius:10,fontWeight:600,border:"none",cursor:"pointer",marginTop:10,display:"block"}}>{"Continue \u2192"}</button>
+          </div>}/></>}
+
+          {/* ===== STEP 4: BEFORE READING ===== */}
+          {step>=4&&<>
+          {isKB&&<Bub ch={<div style={{background:"#EEFBF2",border:"1.5px solid #22A652",borderRadius:12,padding:"10px 14px"}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#22A652",textTransform:"uppercase",letterSpacing:.8,marginBottom:3}}>{"\u2713"} {book} is in our library</div>
+            <div style={{fontSize:12,color:"#555"}}>{kb.about}</div>
+            <div style={{fontSize:11,color:"#888",marginTop:4}}>{"I\u2019ll give you tips specific to this book throughout."}</div>
+          </div>}/>}
+          <Div l="Step 4 · Before Reading"/>
+          <Bub ch={<div>
+            <b>How will you engage children before reading?</b>
+            <div style={{fontSize:12.5,color:"#6B6B6B",margin:"4px 0 8px"}}>Pick up to 2 <span style={{display:"inline-block",fontSize:9,fontWeight:700,background:"#FFF3E6",color:"#E8913A",padding:"2px 6px",borderRadius:6,marginLeft:6,textTransform:"uppercase"}}>Max 2</span></div>
+            {BEFORE_OPTS.map(o=><Chk key={o.label} l={o.label} on={bfC.includes(o.label)} off={bfC.length>=2&&!bfC.includes(o.label)} fn={()=>togBf(o.label)} badge={o.rec?"Always recommended":null}/>)}
+            {bfC.length>0&&<button onClick={()=>go(5)} style={S.btn}>Continue →</button>}
+          </div>}/></>}
+
+          {/* STEP 4 FOLLOW-UPS — each gets strategy-linked suggestions */}
+          {step>=5&&<><Bub ch={<span>{bfC.join(", ")}</span>} u/>
+
+            {/* Introduce — just a simple instruction */}
+            {bfC.includes("Introduce the book (title, author, illustrator)")&&<Bub ch={<div>
+              <div style={{background:"#E8F3ED",border:"1px solid #B8D9C5",borderRadius:12,padding:"10px 14px",fontSize:13}}>
+                <b style={{color:"#166534"}}>📖 Introduce the book:</b>
+                <div style={{marginTop:4}}>Show the cover, read the title, author, and illustrator's name aloud.</div>
+              </div>
+            </div>}/>}
+
+            {/* Connect follow-up */}
+            {bfC.includes("Connect the story to children's experiences")&&<Bub ch={<div>
+              <b>How will you connect to their experiences?</b>
+              {isKB&&<div style={{fontSize:11,color:"#22A652",fontWeight:600,marginBottom:4}}>{"Tips for "+book+":"}</div>}
+              <SuggPicker suggestions={isKB?kb.connectSuggs:connectSuggs} value={connectText} onChange={sConnectText}
+                placeholder={isKB?"Pick one or write your own for "+book:"What question or prompt will you use to connect to their lives?"}
+                label={isKB?null:"Tap one or write your own:"}/>
+            </div>}/>}
+
+            {/* Predictions follow-up */}
+            {bfC.includes("Encourage predictions")&&<Bub ch={<div>
+              <b>How will you encourage predictions?</b>
+              {isKB&&<div style={{fontSize:11,color:"#22A652",fontWeight:600,marginBottom:4}}>{"For "+book+":"}</div>}
+              <SuggPicker suggestions={isKB?kb.predictSuggs:predictSuggs} value={predictText} onChange={sPredictText}
+                placeholder={isKB?"Pick one or write your own for "+book:"What will you ask students to predict?"}
+                label={isKB?null:"Tap one or write your own:"}/>
+            </div>}/>}
+
+            {/* Vocab follow-up */}
+            {bfC.includes("Explain new vocabulary")&&<Bub ch={<div>
+              <b>What words will you introduce?</b>
+              {isKB?<div>
+                <div style={{fontSize:11,color:"#22A652",fontWeight:600,marginBottom:4}}>{"Suggested for "+book+":"}</div>
+                {kb.vocab.map(function(v,i){
+                  var parts=v.split("(");var word=parts[0].trim();var def=parts[1]?parts[1].replace(")",""):"";
+                  return <div key={i} style={{display:"flex",alignItems:"baseline",gap:6,padding:"8px 12px",borderRadius:10,border:"1px solid #B8D9C5",background:"#EEFBF2",marginBottom:4,fontSize:13}}>
+                    <span style={{fontWeight:700,color:"#166534",whiteSpace:"nowrap"}}>{word}</span><span>—</span><span>{def}</span>
+                  </div>;
+                })}
+                <div style={{fontSize:11,color:"#888",fontStyle:"italic",marginTop:4}}>These are ready to use. You can also add your own.</div>
+              </div>
+              :<div>
+                <div style={{fontSize:12,color:"#6B6B6B",marginBottom:6}}>Pick 2–3 words students need to understand the story.</div>
+                <div style={{display:"flex",gap:6}}>
+                  <input type="text" value={vW} onChange={e=>sVW(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")mkDefs()}} placeholder="e.g. ugly, duckling, swan" style={{...S.fld,flex:1}}/>
+                  <button onClick={mkDefs} style={{...S.btn,marginTop:0}}>Go</button>
+                </div>
+                {showD&&vD.length>0&&<div style={{marginTop:10}}>
+                  <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>Here's how you could explain these:</div>
+                  {vD.map((d,i)=><div key={i} style={{display:"flex",alignItems:"baseline",gap:6,padding:"8px 12px",borderRadius:10,border:"1px solid "+(d.edited?"#E8913A":"#E5E0DA"),background:d.edited?"#FFF3E6":"#FAFAF8",marginBottom:4,fontSize:13.5}}>
+                    <span style={{fontWeight:700,color:"#166534",whiteSpace:"nowrap"}}>{d.word}</span><span>—</span>
+                    <input type="text" value={d.meaning} onChange={e=>updDef(i,e.target.value)} style={{flex:1,background:"transparent",border:"none",fontSize:13,outline:"none"}}/>
+                    {d.edited&&<span style={{fontSize:9,fontWeight:700,color:"#E8913A",textTransform:"uppercase"}}>edited</span>}
+                  </div>)}
+                  <div style={{fontSize:12,color:"#999",fontStyle:"italic",marginTop:4}}>Tap any definition to edit.</div>
+                </div>}
+              </div>}
+            </div>}/>}
+
+            {/* Cover follow-up */}
+            {bfC.includes("Explore the cover and endpapers")&&<Bub ch={<div>
+              <b>What will you ask about the cover?</b>
+              {isKB?<div>
+                <div style={{fontSize:11,color:"#22A652",fontWeight:600,marginBottom:4}}>{"For "+book+":"}</div>
+                <div style={{padding:"8px 12px",borderRadius:10,fontSize:12.5,border:"2px solid #22A652",background:"#EEFBF2",marginBottom:6,cursor:"pointer"}} onClick={function(){sCQ(kb.coverQ)}}>
+                  {kb.coverQ}
+                </div>
+                <div style={{fontSize:11,color:"#888",marginBottom:4}}>Tap to use, then edit if you like:</div>
+              </div>
+              :<div>
+                <div style={S.alert}>{"\uD83D\uDC41\uFE0F"} Look at your cover first {"\u2014"} these are general suggestions. Pick or adapt what fits your cover.</div>
+                <div style={{fontSize:12,color:"#6B6B6B",marginBottom:6}}>Tap a question to use it, then edit:</div>
+                {COVER_QS_GENERAL.map(function(cq){return <QC key={cq} ty="General" co="#6B6B6B" tx={cq} sel={cQ===cq} fn={function(){sCQ(cq)}}/>})}
+                {cQsS.map(function(cq){return <QC key={cq} ty={"Support "+strat.name} co="#166534" tx={cq} sel={cQ===cq} fn={function(){sCQ(cq)}}/>})}
+                <div style={{fontSize:12,fontWeight:600,color:"#2563EB",marginTop:6,cursor:"pointer"}}>{"\uD83D\uDCD6"} See more questions {"\u2192"}</div>
+                <div style={{fontSize:12,fontStyle:"italic",color:"#999",margin:"6px 0"}}>{"\u270D\uFE0F"} Make it your own {"\u2014"} use details from your book.</div>
+              </div>}
+              <textarea value={cQ} onChange={function(e){sCQ(e.target.value)}} rows={2} placeholder="Type or edit your question..." style={{...S.fld,...(cQ?S.fldOk:{})}}/>
+            </div>}/>}
+
+            <Bub ch={<div>
+              <button onClick={()=>sShBA(!shBA)} style={S.detBtn}><span style={{fontSize:11,display:"inline-block",transition:"transform .2s",transform:shBA?"rotate(90deg)":"none"}}>▶</span> Before-reading activities you might try</button>
+              {shBA&&<div style={{marginTop:6}}>{aS.map(a=><div key={a.name} style={{background:"#E8F3ED",border:"1px solid #B8D9C5",borderRadius:10,padding:"8px 12px",fontSize:13,marginBottom:4}}><b style={{color:"#166534"}}>{a.name}:</b> {a.desc}</div>)}</div>}
+              <button onClick={()=>go(6)} style={{...S.btn,display:"block"}}>Continue to During Reading →</button>
+            </div>}/>
+          </>}
+
+          {/* ===== STEP 5: DURING READING ===== */}
+          {step>=6&&<><Bub ch={<span>Before Reading ready ✓</span>} u/>
+          <Div l="Step 5 · During Reading"/>
+          <Bub ch={<div style={{background:"#F5F0EB",border:"1px solid #E5E0DA",borderRadius:12,padding:"10px 14px",fontSize:13}}>
+            <b>📚 Flip through your book and note:</b>
+            <div style={{fontSize:12,color:"#6B6B6B",marginTop:4}}>• Difficult words &nbsp;• Dramatic pages &nbsp;• 1–2 pause moments</div>
+            <div style={{fontSize:12,fontStyle:"italic",color:"#999",marginTop:4}}>Tip: Look for moments where {strat?.name} naturally comes up.</div>
+          </div>}/>
+          {/* CHANGE 2: "What will you do" not "what else" */}
+          <Bub ch={<div>
+            <b>What will you do during reading?</b>
+            <div style={{fontSize:12,color:"#6B6B6B",margin:"4px 0 8px"}}>You'll plan your pause points next. Anything else on top of that? <span style={{display:"inline-block",fontSize:9,fontWeight:700,background:"#FFF3E6",color:"#E8913A",padding:"2px 6px",borderRadius:6,marginLeft:4,textTransform:"uppercase"}}>Optional</span></div>
+            {DURING_OPTS.map(o=><Chk key={o} l={o} on={drC.includes(o)} off={drC.length>=2&&!drC.includes(o)} fn={()=>togDr(o)}/>)}
+            <button onClick={()=>go(7)} style={S.btn}>Continue →</button>
+          </div>}/></>}
+
+          {/* During follow-ups + pauses always */}
+          {step>=7&&<><Bub ch={<span>{drC.length?drC.join(", "):"No extras — just pauses"}</span>} u/>
+
+            {hasVocabBefore&&hasWordsDuring&&<Bub ch={<div style={S.alert}>
+              📝 You're introducing vocabulary before <i>and</i> during reading — that's fine, just be careful not to overdo it. Focus on different words for each phase.
+            </div>}/>}
+
+            {drC.includes("Explain important words or ideas")&&<Bub ch={<div>
+              <b>Words to explain during reading?</b>
+              <div style={{fontSize:12,color:"#6B6B6B",marginBottom:6}}>Already introduced words before? No need to repeat. These come up in the story.</div>
+              <textarea value={drW} onChange={e=>sDrW(e.target.value)} rows={2} placeholder="e.g. rejected, reflection, graceful" style={{...S.fld,...(drW?S.fldOk:{})}}/>
+            </div>}/>}
+
+            {/* Pause points — always shown */}
+            <Bub ch={<div>
+              <b>Plan your pause points:</b>
+              {isKB?<div>
+                <div style={{fontSize:11,color:"#22A652",fontWeight:600,marginBottom:6}}>{"Suggested pauses for "+book+":"}</div>
+                {kb.pauseSugg.map(function(ps,i){return <div key={i} style={{...S.pCard,...S.pCardOk,marginBottom:8}}>
+                  <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:.8,color:"#166534",marginBottom:4}}>{"Pause "+(i+1)}</div>
+                  <div style={{fontSize:11,fontWeight:600,color:"#6B6B6B",marginBottom:2}}>Where:</div>
+                  <div style={{fontSize:12,marginBottom:4}}>{ps.where}</div>
+                  <div style={{fontSize:11,fontWeight:600,color:"#6B6B6B",marginBottom:2}}>What to do:</div>
+                  <div style={{fontSize:12}}>{ps.what}</div>
+                </div>})}
+                <div style={{fontSize:11,color:"#888",fontStyle:"italic",marginTop:4}}>These are ready to use. Edit below if you want to change them.</div>
+              </div>
+              :<div>
+                <div style={{fontSize:12,color:"#6B6B6B",marginBottom:6}}>Where will you stop? What will you do?</div>
+                <div style={{fontSize:12,fontWeight:600,color:"#6B6B6B",marginBottom:4}}>At a pause you might:</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:10}}>
+                  {PAUSE_ACTIONS.map(function(a){return <span key={a} style={{fontSize:11,background:"#F5F0EB",padding:"3px 8px",borderRadius:8,border:"1px solid #E5E0DA"}}>{a}</span>})}
+                </div>
+                <div style={{fontSize:12,fontWeight:600,color:"#166534",marginBottom:4}}>Questions that support {strat?.name}:</div>
+                {pQs.map(function(pq){return <div key={pq} style={{fontSize:12,background:"#FAFAF8",border:"1px solid #E5E0DA",borderRadius:8,padding:"6px 10px",marginBottom:4}}>{"\u201C"+pq+"\u201D"}</div>})}
+                <div style={{fontSize:12,fontWeight:600,color:"#2563EB",margin:"6px 0 10px",cursor:"pointer"}}>{"\uD83D\uDCD6"} See more questions {"\u2192"}</div>
+              </div>}
+
+              <div style={{...S.pCard,...(p1w?S.pCardOk:{})}}>
+                <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:.8,color:"#166534",marginBottom:6}}>Pause 1</div>
+                <div style={{fontSize:11,fontWeight:600,color:"#6B6B6B",marginBottom:2}}>Where in the book?</div>
+                <input type="text" value={p1w} onChange={function(e){sP1w(e.target.value)}} placeholder={isKB?kb.pauseSugg[0].where:"e.g. After something important happens"} style={{...S.fld,padding:"6px 10px",marginBottom:8,...(p1w?S.fldOk:{})}}/>
+                <div style={{fontSize:11,fontWeight:600,color:"#6B6B6B",marginBottom:4}}>What will you do?</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:6}}>
+                  {PAUSE_ACTIONS.map(function(a){return <span key={a} onClick={function(){sP1a(a)}} style={{...S.chip,...(p1a===a?S.chipOn:{})}}>{a}</span>})}
+                </div>
+                <input type="text" value={p1d} onChange={function(e){sP1d(e.target.value)}} placeholder={isKB?kb.pauseSugg[0].what:"e.g. Ask an inference question"} style={{...S.fld,padding:"6px 10px",...(p1d?S.fldOk:{})}}/>
+              </div>
+
+              <div style={{...S.pCard,...(p2w?S.pCardOk:{})}}>
+                <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:.8,color:"#166534",marginBottom:6}}>Pause 2</div>
+                <div style={{fontSize:11,fontWeight:600,color:"#6B6B6B",marginBottom:2}}>Where in the book?</div>
+                <input type="text" value={p2w} onChange={function(e){sP2w(e.target.value)}} placeholder={isKB&&kb.pauseSugg[1]?kb.pauseSugg[1].where:"e.g. At a surprising moment"} style={{...S.fld,padding:"6px 10px",marginBottom:8,...(p2w?S.fldOk:{})}}/>
+                <div style={{fontSize:11,fontWeight:600,color:"#6B6B6B",marginBottom:4}}>What will you do?</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:6}}>
+                  {PAUSE_ACTIONS.map(function(a){return <span key={a} onClick={function(){sP2a(a)}} style={{...S.chip,...(p2a===a?S.chipOn:{})}}>{a}</span>})}
+                </div>
+                <input type="text" value={p2d} onChange={function(e){sP2d(e.target.value)}} placeholder={isKB&&kb.pauseSugg[1]?kb.pauseSugg[1].what:"e.g. Ask why that happened"} style={{...S.fld,padding:"6px 10px",...(p2d?S.fldOk:{})}}/>
+              </div>
+              <div style={{fontSize:12,fontStyle:"italic",color:"#999",marginTop:4}}>{isKB?"Edit any of these to make them your own.":"\u270D\uFE0F Use the character\u2019s name and what\u2019s happening at that moment."}</div>
+            </div>}/>
+
+            <Bub ch={<div>
+              <div style={{background:"#F5F0EB",borderRadius:10,padding:"8px 12px",fontSize:12,color:"#6B6B6B"}}><b>Keep in mind:</b> Short interactions · Give thinking time · All children see the book</div>
+              <button onClick={()=>go(8)} style={{...S.btn,display:"block"}}>Continue to After Reading →</button>
+            </div>}/>
+          </>}
+
+          {/* ===== STEP 6: AFTER READING ===== */}
+          {step>=8&&<><Bub ch={<span>During Reading ready ✓</span>} u/>
+          <Div l="Step 6 · After Reading"/>
+          <Bub ch={<div>
+            <b>Will you do a Turn & Talk?</b>
+            <div style={{fontSize:13,color:"#6B6B6B",marginBottom:8}}>A quick Turn & Talk helps every student process the story.</div>
+            <div style={{display:"flex",gap:8,marginBottom:8}}>
+              <button onClick={()=>{sTT(true);go(9)}} style={{flex:1,padding:10,borderRadius:12,border:"2px solid "+(doTT===true?"#166534":"#E5E0DA"),background:doTT===true?"#E8F3ED":"#FAFAF8",fontSize:15,fontWeight:600,cursor:"pointer",color:doTT===true?"#166534":"#2C2C2C"}}>Yes</button>
+              <button onClick={()=>{sTT(false);go(9)}} style={{flex:1,padding:10,borderRadius:12,border:"2px solid "+(doTT===false?"#666":"#E5E0DA"),background:doTT===false?"#F0F0F0":"#FAFAF8",fontSize:15,fontWeight:600,cursor:"pointer",color:doTT===false?"#555":"#2C2C2C"}}>No</button>
+            </div>
+            <div style={S.rec}>⭐ Recommended — even 2 minutes of partner talk makes a difference.</div>
+          </div>}/></>}
+
+          {/* T&T question picker — tap to prefill, then edit */}
+          {step>=9&&doTT&&<><Bub ch={<span>Yes — Turn & Talk</span>} u/>
+          <Bub ch={<div>
+            <b>Pick your Turn & Talk questions</b>
+            {isKB?<div>
+              <div style={{fontSize:11,color:"#22A652",fontWeight:600,margin:"4px 0 8px"}}>{"Questions for "+book+":"}</div>
+              {kb.ttQs.map(function(tq,i){return <QC key={i} ty={tq.type} co={tq.co} tx={tq.q} sel={ttQs.includes(tq.q)} fn={function(){pickTTQ(tq.q)}}/>})}
+              <div style={{marginTop:10}}>
+                <button onClick={function(){setShowMatrix(!showMatrix)}} style={S.detBtn}>
+                  <span style={{fontSize:11,display:"inline-block",transition:"transform .2s",transform:showMatrix?"rotate(90deg)":"none"}}>{"\u25B6"}</span>
+                  {"More questions for "+book}
+                </button>
+                {showMatrix&&<div style={{marginTop:6}}>
+                  {kb.ttExtras.map(function(tq,i){return <QC key={i} ty={tq.type} co={tq.co} tx={tq.q} sel={ttQs.includes(tq.q)} fn={function(){pickTTQ(tq.q)}}/>})}
+                </div>}
+              </div>
+            </div>
+            :<div>
+              <div style={{fontSize:12,color:"#6B6B6B",margin:"4px 0 8px"}}>{"Here\u2019s one for each level, matched to "}<b>{strat?.name}</b>{". Tap to add, then edit:"}</div>
+              <QC ty="Recall" co="#2563EB" tx={ttPicks.recall} sel={ttQs.includes(ttPicks.recall)} fn={function(){pickTTQ(ttPicks.recall)}}/>
+              <QC ty="Connect" co="#166534" tx={ttPicks.connect} sel={ttQs.includes(ttPicks.connect)} fn={function(){pickTTQ(ttPicks.connect)}}/>
+              <QC ty="Evaluate" co="#E8913A" tx={ttPicks.evaluate} sel={ttQs.includes(ttPicks.evaluate)} fn={function(){pickTTQ(ttPicks.evaluate)}}/>
+              <div style={{marginTop:10}}>
+                <button onClick={function(){setShowMatrix(!showMatrix)}} style={S.detBtn}>
+                  <span style={{fontSize:11,display:"inline-block",transition:"transform .2s",transform:showMatrix?"rotate(90deg)":"none"}}>{"\u25B6"}</span>
+                  Pick more from the full matrix
+                </button>
+                {showMatrix&&<div style={{marginTop:6}}>
+                  {["recall","connect","evaluate"].map(function(cat){return <div key={cat}>
+                    <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:.8,color:cat==="recall"?"#2563EB":cat==="connect"?"#166534":"#E8913A",margin:"8px 0 4px"}}>{cat}</div>
+                    {(ttExtras[cat]||[]).map(function(tq){return <div key={tq} onClick={function(){pickTTQ(tq)}}
+                      style={{...S.qC,...(ttQs.includes(tq)?S.qCSel:{}),fontSize:12}}>
+                      {"\u201C"+tq+"\u201D"}
+                    </div>})}
+                  </div>})}
+                </div>}
+              </div>
+            </div>}
+
+            {/* Editable question slots */}
+            <div style={{fontSize:12,fontWeight:600,color:"#6B6B6B",marginTop:12,marginBottom:4}}>Your questions — edit to personalize:</div>
+            {ttQs.map(function(tq,i){return <div key={i} style={{display:"flex",gap:4,alignItems:"flex-start",marginBottom:6}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#166534",marginTop:8,flexShrink:0}}>{i+1}.</div>
+              <textarea value={tq} onChange={function(e){updateTTQ(i,e.target.value)}} rows={2} placeholder="Type or tap a suggestion above..." style={{...S.fld,flex:1,...(tq?S.fldOk:{})}}/>
+              {ttQs.length>1&&<button onClick={function(){removeTTQ(i)}} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,color:"#999",marginTop:6}}>{"\u2715"}</button>}
+            </div>})}
+            {ttQs.length<3&&<button onClick={addTTQ} style={{background:"none",border:"1px dashed #CCC",borderRadius:10,padding:"6px 12px",fontSize:12,color:"#6B6B6B",cursor:"pointer",width:"100%",marginTop:2}}>+ Add another question (up to 3)</button>}
+            <div style={{fontSize:12,fontStyle:"italic",color:"#999",marginTop:6}}>{isKB?"Edit any of these to make them your own.":"\u270D\uFE0F Use the character\u2019s name and details from the story."}</div>
+          </div>}/></>}
+          {step>=9&&doTT===false&&<Bub ch={<span>No Turn & Talk</span>} u/>}
+
+          {/* Activities */}
+          {step>=9&&<><Bub ch={<div>
+            <b>Want to add an activity?</b>
+            <div style={{fontSize:12,color:"#6B6B6B",margin:"4px 0 4px"}}>{doTT?"Some teachers pair Turn & Talk with a hands-on activity.":"Pick an after-reading activity:"}</div>
+            <div style={{fontSize:12.5,color:"#6B6B6B",marginBottom:8}}>Pick up to 2 <span style={{display:"inline-block",fontSize:9,fontWeight:700,background:"#E8F3ED",color:"#166534",padding:"2px 6px",borderRadius:6,marginLeft:4,textTransform:"uppercase"}}>1 recommended</span> <span style={{display:"inline-block",fontSize:9,fontWeight:700,background:"#FFF3E6",color:"#E8913A",padding:"2px 6px",borderRadius:6,marginLeft:4,textTransform:"uppercase"}}>Max 2</span></div>
+            {AFTER_ACTS.map(o=>{
+              const clean=afA.filter(x=>x!=="none");
+              return <Chk key={o} l={o} on={afA.includes(o)} off={clean.length>=2&&!clean.includes(o)} fn={()=>togAf(o)}/>;
+            })}
+            {doTT&&<Chk l="No activity — just Turn & Talk" on={afA.includes("none")} fn={()=>sAfA(["none"])}/>}
+            <button onClick={()=>sShAA(!shAA)} style={{...S.detBtn,marginTop:8}}><span style={{fontSize:11,display:"inline-block",transition:"transform .2s",transform:shAA?"rotate(90deg)":"none"}}>▶</span> Activities that support {strat?.name}</button>
+            {shAA&&<div style={{marginTop:4}}>{aS.map(a=><div key={a.name} style={{background:"#E8F3ED",border:"1px solid #B8D9C5",borderRadius:10,padding:"8px 12px",fontSize:12,marginBottom:4}}><b style={{color:"#166534"}}>{a.name}:</b> {a.desc}</div>)}</div>}
+          </div>}/>
+
+          {/* Editable activity details — KB-specific per activity type, or generic */}
+          {afA.filter(a=>a!=="none").map(function(act){
+            var kbOpts = isKB && kb.actByType && kb.actByType[act] ? kb.actByType[act] : null;
+            var genOpts = ACT_PREFILLS[act] || [];
+            var opts = kbOpts || genOpts;
+            return <Bub key={act} ch={<div>
+              <b style={{fontSize:13}}>{act}</b>
+              {isKB&&kbOpts&&<div style={{fontSize:11,color:"#22A652",fontWeight:600,marginTop:4}}>{"For "+book+":"}</div>}
+              <div style={{fontSize:12,color:"#6B6B6B",marginTop:isKB&&kbOpts?2:4,marginBottom:6}}>Tap a suggestion to start, then edit:</div>
+              <div style={{marginBottom:6}}>
+                {opts.map(function(s,i){return <span key={i} onClick={function(){setAfNote(act,s)}}
+                  style={{...S.suggBubble,...(afNotes[act]===s?S.suggBubbleSel:{})}}>{s}</span>})}
+              </div>
+              <div style={{fontSize:12,fontStyle:"italic",color:"#999",marginBottom:4}}>{isKB?"Edit to make it your own.":"\u270D\uFE0F Tap one or write your own \u2014 make it specific to your book."}</div>
+              <textarea value={afNotes[act]||""} onChange={function(e){setAfNote(act,e.target.value)}} rows={2}
+                placeholder={isKB?"Edit the suggestion or write your own":"What specifically will students do?"}
+                style={{...S.fld,...(afNotes[act]?S.fldOk:{})}}/>
+            </div>}/>;
+          })}
+
+          {(afA.length>0||getAllTTQs().length>0)&&<Bub ch={<button onClick={()=>go(10)} style={S.btn}>Review my plan →</button>}/>}
+          </>}
+
+          {/* ===== STEP 7: REVIEW — CHANGE 5: capture everything ===== */}
+          {step>=10&&<><Bub ch={<span>After Reading ready ✓</span>} u/>
+          <Div l="Step 7 · Review & Save"/>
+          <Bub ch={<div>
+            <b>Here's your plan:</b>
+            <div style={S.sum}>
+              <div style={{fontSize:12,color:"#6B6B6B",marginBottom:8}}>Grade {grade} · {stu} students · {book}<br/>Objective: {strat?.id}. {strat?.name}{genre&&<span> · {genre}{hasChar==="yes"?" · has main character":""}{hasIllus==="yes"?" · illustrated":""}</span>}</div>
+              {bookAbout&&<div style={{fontSize:11.5,color:"#888",fontStyle:"italic",marginBottom:8}}>{bookAbout}</div>}
+
+              <div><div style={S.sumLbl}>Before Reading</div>
+                <div style={{fontSize:12.5}}>{bfC.join(", ")}</div>
+                {bfC.includes("Introduce the book (title, author, illustrator)")&&<div style={{fontSize:12.5,marginTop:2}}><b>Intro:</b> Show the cover, read the title, author, and illustrator's name aloud.</div>}
+                {connectText&&<div style={{fontSize:12.5,marginTop:2}}><b>Connect:</b> {connectText}</div>}
+                {predictText&&<div style={{fontSize:12.5,marginTop:2}}><b>Predictions:</b> {predictText}</div>}
+                {vD.length>0&&<div style={{fontSize:12.5,marginTop:2}}><b>Vocab:</b> {vD.map(d=>d.word+" ("+d.meaning+")").join(", ")}</div>}
+                {cQ&&<div style={{fontSize:12.5,marginTop:2}}><b>Cover Q:</b> "{cQ}"</div>}
+              </div>
+
+              <div style={S.sumSec}><div style={S.sumLbl}>During Reading</div>
+                {drC.length>0&&<div style={{fontSize:12.5}}>{drC.join(", ")}</div>}
+                {drW&&<div style={{fontSize:12.5,marginTop:2}}><b>Words:</b> {drW}</div>}
+                {p1w&&<div style={{fontSize:12.5,marginTop:2}}><b>Pause 1:</b> {p1w} → {p1a}{p1d?", "+p1d:""}</div>}
+                {p2w&&<div style={{fontSize:12.5,marginTop:2}}><b>Pause 2:</b> {p2w} → {p2a}{p2d?", "+p2d:""}</div>}
+                {!p1w&&!p2w&&!drC.length&&!drW&&<div style={{fontSize:12.5,color:"#999"}}>(No details entered)</div>}
+              </div>
+
+              <div style={S.sumSec}><div style={S.sumLbl}>After Reading</div>
+                {doTT&&getAllTTQs().length>0&&<div style={{fontSize:12.5}}>
+                  <b>Turn & Talk:</b>
+                  {getAllTTQs().map((x,i)=><div key={i} style={{marginLeft:8}}>• "{x.q}"</div>)}
+                </div>}
+                {doTT&&getAllTTQs().length===0&&<div style={{fontSize:12.5}}>Turn & Talk (no questions selected)</div>}
+                {doTT===false&&<div style={{fontSize:12.5}}>No Turn & Talk</div>}
+                {afA.filter(a=>a!=="none").map(act=>(
+                  <div key={act} style={{fontSize:12.5,marginTop:2}}><b>{act}:</b> {afNotes[act]||"(no details)"}</div>
+                ))}
+                {getAllTTQs().length>0&&<div style={{fontSize:12.5,marginTop:4}}><b>R/C/E:</b> {autoRCE().join(", ")}</div>}
+              </div>
+            </div>
+            {mode==="build"&&!saved?<button onClick={()=>sSaved(true)} style={{marginTop:12,width:"100%",padding:14,background:"#166534",color:"#fff",border:"none",borderRadius:14,fontSize:16,fontWeight:700,cursor:"pointer"}}>Save lesson plan</button>
+            :mode==="build"&&saved?<div style={{textAlign:"center",marginTop:12}}>
+              <div style={{fontSize:24,marginBottom:4}}>{"\uD83C\uDF1F"}</div>
+              <div style={{fontWeight:700,color:"#166534"}}>Saved! Good luck with your lesson.</div>
+              <div style={{fontSize:12,color:"#6B6B6B",marginTop:4}}>Want to build another plan?</div>
+            </div>
+            :<div style={{textAlign:"center",marginTop:12}}>
+              <div style={{fontSize:24,marginBottom:4}}>{"\uD83C\uDF1F"}</div>
+              <div style={{fontWeight:700,color:"#166534"}}>{"You\u2019re all set! Good luck with your lesson."}</div>
+              <div style={{fontSize:12,color:"#6B6B6B",marginTop:4}}>Use this as a reference while you plan. Come back any time.</div>
+            </div>}
+          </div>}/></>}
+
+          <div ref={er}/>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(<App/>,document.getElementById("root"));
+</script>
+</body>
+</html>
